@@ -33,6 +33,8 @@
 #define CLEARBITS(x,y) ((x) &= (~(y)))
 #define SETBIT(x,y) SETBITS((x), (BIT((y))))
 #define CLEARBIT(x,y) CLEARBITS((x), (BIT((y))))
+#define swspi_pulseclk SETBIT(swspi_port,swspi_CLK); asm("nop"); CLEARBIT(swspi_port,swspi_CLK)
+#define lcd_pulseEnable SETBIT(lcd_port,lcd_enable); asm("nop"); CLEARBIT(lcd_port,lcd_enable)
 
 void delay_ms(uint16_t delay)
 {
@@ -143,9 +145,62 @@ char SPISendByte(unsigned char cData)
 
 	return SPDR;
 }
+void softspi_init(){
+		swspi_DDR |= (1 << swspi_MOSI) | (1 << swspi_SCK);
+}
 
+void softspi_send(uint8_t data){
+	if(data & 0x80) SETBIT(swspi_port,swspi_MOSI);
+	else CLEARBIT(swspi_port,swspi_MOSI);
+	swspi_pulseclk;
+	if(data & 0x40) SETBIT(swspi_port,swspi_MOSI);
+	else CLEARBIT(swspi_port,swspi_MOSI);
+	swspi_pulseclk;
+	if(data & 0x20) SETBIT(swspi_port,swspi_MOSI);
+	else CLEARBIT(swspi_port,swspi_MOSI);
+	swspi_pulseclk;
+	if(data & 0x10) SETBIT(swspi_port,swspi_MOSI);
+	else CLEARBIT(swspi_port,swspi_MOSI);
+	swspi_pulseclk;
+	if(data & 0x08) SETBIT(swspi_port,swspi_MOSI);
+	else CLEARBIT(swspi_port,swspi_MOSI);
+	swspi_pulseclk;
+	if(data & 0x04) SETBIT(swspi_port,swspi_MOSI);
+	else CLEARBIT(swspi_port,swspi_MOSI);
+	swspi_pulseclk;
+	if(data & 0x02) SETBIT(swspi_port,swspi_MOSI);
+	else CLEARBIT(swspi_port,swspi_MOSI);
+	swspi_pulseclk;
+	if(data & 0x01) SETBIT(swspi_port,swspi_MOSI);
+	else CLEARBIT(swspi_port,swspi_MOSI);
+	swspi_pulseclk;
+	}
 
+void lcd_init(){
+	softspi_send(0x02); // set 4 bit mode
+	swspi_pulseclk;     // +1 exta clock pulse for 74hc595 because SRCLK and RCLK tied togeather  
+	lcd_pulseEnable;
+	lcd_send(COMMAND,0x28); // (Function set) 0b001 (4 bit mode) 0  (2 line display mode) 1000 -> 0b00101000 
+	lcd_send(COMMAND,0x0E); // Display on/off control
+	lcd_send(COMMAND,0x06); // Entry mode set
+}
 
+void lcd_send(uint8_t RS , uint8_t data){
+	if(RS) softspi_send(data >> 4);  // highter 4 bit and RS set 0 (Command)
+	else   softspi_send( (data >> 4)| LCD_DATA ); // highter 4 bit and RS set 1 (Data)
+	swspi_pulseclk;
+	lcd_pulseEnable;
+	softspi_send(data & 0x0F);  // lower 4 bit
+	swspi_pulseclk;
+	lcd_pulseEnable;
+}
+
+void lcd_string (char *str){
+	wihle(*str){
+		lcd_send(DATA , *str);
+		str++;
+	}
+}
 
 /*************************************************************************
  Initialization of the I2C bus interface. Need to be called only once
